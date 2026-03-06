@@ -23,7 +23,6 @@
         const gameMenuPanel = document.getElementById("game-menu-panel");
         const gameMenuNewBtn = document.getElementById("game-menu-new-btn");
         const gameMenuContinueBtn = document.getElementById("game-menu-continue-btn");
-        const gameMenuSkinBtn = document.getElementById("game-menu-skin-btn");
         const gameMenuPowerBtn = document.getElementById("game-menu-power-btn");
         const gameMenuTimeBtn = document.getElementById("game-menu-time-btn");
         const gameMenuBackBtn = document.getElementById("game-menu-back-btn");
@@ -586,7 +585,7 @@
             applyRandomMenuBackground();
             menuStatus.textContent = message;
             shopNavBtn.disabled = false;
-            powerNavBtn.disabled = false;
+            if (powerNavBtn) powerNavBtn.disabled = false;
             continueBtn.disabled = !hasStartedRun || !canContinue();
             if (victoryBackBtn) {
                 victoryBackBtn.classList.toggle("hidden", !showVictoryBack);
@@ -3046,7 +3045,7 @@
         document.getElementById("play-btn").addEventListener("click", startNewRun);
         document.getElementById("continue-btn").addEventListener("click", continueRun);
         shopNavBtn.addEventListener("click", openSkinShopScreen);
-        powerNavBtn.addEventListener("click", openPowerShopScreen);
+        if (powerNavBtn) powerNavBtn.addEventListener("click", openPowerShopScreen);
         document.getElementById("settings-nav-btn").addEventListener("click", openSettingsScreen);
         document.getElementById("timer-nav-btn").addEventListener("click", showTimeStats);
         document.getElementById("skin-shop-back-btn").addEventListener("click", () => openMainMenu("Welcome"));
@@ -3070,10 +3069,6 @@
         gameMenuContinueBtn.addEventListener("click", () => {
             closeGameQuickMenu();
             continueRun();
-        });
-        gameMenuSkinBtn.addEventListener("click", () => {
-            closeGameQuickMenu();
-            openSkinShopScreen();
         });
         gameMenuPowerBtn.addEventListener("click", () => {
             closeGameQuickMenu();
