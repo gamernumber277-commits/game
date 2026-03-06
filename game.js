@@ -11,6 +11,7 @@
         };
 
         const menuStatus = document.getElementById("menu-status");
+        const victoryBackBtn = document.getElementById("victory-back-btn");
         const continueBtn = document.getElementById("continue-btn");
         const shopNavBtn = document.getElementById("shop-nav-btn");
         const powerNavBtn = document.getElementById("power-nav-btn");
@@ -18,10 +19,18 @@
         const powerShopPoints = document.getElementById("power-shop-points");
         const skinShopList = document.getElementById("shop-skins");
         const powerShopList = document.getElementById("shop-powerups");
+        const menuBtn = document.getElementById("menu-btn");
+        const gameMenuPanel = document.getElementById("game-menu-panel");
+        const gameMenuNewBtn = document.getElementById("game-menu-new-btn");
+        const gameMenuContinueBtn = document.getElementById("game-menu-continue-btn");
+        const gameMenuSkinBtn = document.getElementById("game-menu-skin-btn");
+        const gameMenuPowerBtn = document.getElementById("game-menu-power-btn");
+        const gameMenuTimeBtn = document.getElementById("game-menu-time-btn");
+        const gameMenuBackBtn = document.getElementById("game-menu-back-btn");
         const powerBtn = document.getElementById("power-btn");
-        const timeBtn = document.getElementById("time-btn");
 
         const MAX_LEVELS = 15;
+        const BOSS_LEVELS = [5, 10, 15];
         const GROUND_Y = canvas.height - 110;
         const GRAVITY = 0.72;
         const JUMP_FORCE = -15;
@@ -196,6 +205,7 @@
         let solids = [];
         let enemies = [];
         let enemyProjectiles = [];
+        let playerProjectiles = [];
         let coins = [];
         let spikes = [];
         let levelTemplates = {};
@@ -222,7 +232,7 @@
             { id: "jump_boost", name: "Flight (10s)", cost: 520 },
             { id: "freeze_boost", name: "Freeze Time (10s)", cost: 350 },
             { id: "hp_boost", name: "+1 Health", cost: 500 },
-            { id: "immortal_boost", name: "Immortal (10s)", cost: 600 }
+            { id: "tracker_boost", name: "Tracker Shot", cost: 300 }
         ];
 
         let unlockedSkins = ["classic"];
@@ -230,6 +240,7 @@
         let unlockedPowerUps = [];
         let selectedPowerUpId = localStorage.getItem("mrp_selected_powerup") || "";
         let dashUsesRemaining = 0;
+        let trackerUsesRemaining = 0;
         let shieldUsedThisRun = false;
         let speedUsedThisRun = false;
 
@@ -421,6 +432,122 @@
         function getHeartIcons() {
             return health > 0 ? "\u2764\uFE0F".repeat(health) : "NONE";
         }
+        function isBossLevel(level) {
+            return BOSS_LEVELS.includes(level);
+        }
+        function getBossForLevel(level) {
+            return enemies.find(e => e.type === "boss" && !e.dead && e.level === level) || null;
+        }
+        function getBossConfig(level) {
+            if (level === 5) {
+                return {
+                    label: "Goomba Boss",
+                    archetype: "goomba",
+                    maxHealth: 4,
+                    speed: 1.8,
+                    jumpForce: 8.2,
+                    jumpEveryMin: 78,
+                    jumpEveryMax: 112,
+                    shootEveryMin: 9999,
+                    shootEveryMax: 9999,
+                    projectileSpeed: 0,
+                    reward: 900,
+                    body: "#8b5cf6",
+                    belly: "#c4b5fd",
+                    eye: "#f8fafc"
+                };
+            }
+            if (level === 10) {
+                return {
+                    label: "Bowser Boss",
+                    archetype: "bowser",
+                    maxHealth: 7,
+                    speed: 2.25,
+                    jumpForce: 8.9,
+                    jumpEveryMin: 64,
+                    jumpEveryMax: 92,
+                    shootEveryMin: 120,
+                    shootEveryMax: 168,
+                    projectileSpeed: 4.2,
+                    reward: 1800,
+                    body: "#ef4444",
+                    belly: "#fca5a5",
+                    eye: "#fff7ed"
+                };
+            }
+            return {
+                label: "Evil Runner Boss",
+                archetype: "evil_runner",
+                maxHealth: 11,
+                speed: 2.9,
+                jumpForce: 9.8,
+                jumpEveryMin: 48,
+                jumpEveryMax: 74,
+                shootEveryMin: 76,
+                shootEveryMax: 118,
+                projectileSpeed: 5.2,
+                reward: 3000,
+                body: "#0f172a",
+                belly: "#64748b",
+                eye: "#f8fafc"
+            };
+        }
+        function addLevelBoss(level, routePlatforms) {
+            if (!isBossLevel(level)) return;
+            const cfg = getBossConfig(level);
+            const arenaW = level === 5 ? 420 : (level === 10 ? 520 : 620);
+            const arenaH = 24;
+            const bossW = level === 5 ? 54 : (level === 10 ? 60 : 66);
+            const bossH = level === 5 ? 52 : (level === 10 ? 58 : 64);
+            const nearGoal = goal.x;
+            const arenaX = clamp(nearGoal - arenaW - 120, 320, Math.max(420, worldWidth - arenaW - 220));
+            const fallbackY = routePlatforms.length ? routePlatforms[routePlatforms.length - 1].y : (GROUND_Y - 170);
+            const arenaY = clamp(fallbackY + randomInt(-12, 12), 170, GROUND_Y - 108);
+
+            addPlatform(arenaX, arenaY, arenaW, arenaH, true);
+            const arena = solids[solids.length - 1];
+            routePlatforms.push(arena);
+
+            goal.x = clamp(arenaX + arenaW + randomInt(86, 116), arenaX + arenaW + 70, worldWidth - 72);
+            levelSpawn = routePlatforms.length > 1
+                ? { x: routePlatforms[0].x + 12, y: routePlatforms[0].y - player.h }
+                : levelSpawn;
+
+            const minX = arenaX + 14;
+            const maxX = arenaX + arenaW - bossW - 14;
+            const boss = {
+                type: "boss",
+                level,
+                label: cfg.label,
+                archetype: cfg.archetype,
+                x: minX + Math.max(0, (maxX - minX) * 0.55),
+                y: arenaY - bossH,
+                w: bossW,
+                h: bossH,
+                minX,
+                maxX,
+                vx: cfg.speed * (Math.random() > 0.5 ? 1 : -1),
+                speed: cfg.speed,
+                baseY: arenaY - bossH,
+                vy: 0,
+                jumpForce: cfg.jumpForce,
+                jumpTimer: randomInt(cfg.jumpEveryMin, cfg.jumpEveryMax),
+                jumpEveryMin: cfg.jumpEveryMin,
+                jumpEveryMax: cfg.jumpEveryMax,
+                shootTimer: randomInt(cfg.shootEveryMin, cfg.shootEveryMax),
+                shootEveryMin: cfg.shootEveryMin,
+                shootEveryMax: cfg.shootEveryMax,
+                projectileSpeed: cfg.projectileSpeed,
+                health: cfg.maxHealth,
+                maxHealth: cfg.maxHealth,
+                reward: cfg.reward,
+                hitFlash: 0,
+                bodyColor: cfg.body,
+                bellyColor: cfg.belly,
+                eyeColor: cfg.eye
+            };
+            enemies.push(boss);
+        }
 
         function showScreen(name) {
             Object.keys(screens).forEach(key => {
@@ -430,8 +557,30 @@
                 screens[key].setAttribute("aria-hidden", isActive ? "false" : "true");
             });
         }
+        function closeGameQuickMenu() {
+            if (!gameMenuPanel || !menuBtn) return;
+            gameMenuPanel.classList.add("hidden");
+            gameMenuPanel.setAttribute("aria-hidden", "true");
+            menuBtn.setAttribute("aria-expanded", "false");
+        }
+        function refreshGameQuickMenuState() {
+            if (!gameMenuContinueBtn) return;
+            gameMenuContinueBtn.disabled = !canContinue();
+        }
+        function toggleGameQuickMenu() {
+            if (!gameMenuPanel || !menuBtn) return;
+            const opening = gameMenuPanel.classList.contains("hidden");
+            if (opening) {
+                refreshGameQuickMenuState();
+                gameMenuPanel.classList.remove("hidden");
+                gameMenuPanel.setAttribute("aria-hidden", "false");
+                menuBtn.setAttribute("aria-expanded", "true");
+            } else {
+                closeGameQuickMenu();
+            }
+        }
 
-        function openMainMenu(message = "Welcome") {
+        function openMainMenu(message = "Welcome", showVictoryBack = false) {
             gamePaused = true;
             saveGameState();
             applyRandomMenuBackground();
@@ -439,27 +588,36 @@
             shopNavBtn.disabled = false;
             powerNavBtn.disabled = false;
             continueBtn.disabled = !hasStartedRun || !canContinue();
+            if (victoryBackBtn) {
+                victoryBackBtn.classList.toggle("hidden", !showVictoryBack);
+            }
+            closeGameQuickMenu();
             showScreen("main");
         }
 
         function openGameScreen() {
             showScreen("game");
             gamePaused = false;
+            closeGameQuickMenu();
+            refreshGameQuickMenuState();
             refreshPowerButtonVisibility();
             updateUI();
         }
 
         function openSkinShopScreen() {
+            closeGameQuickMenu();
             showScreen("skinShop");
             renderShop();
         }
 
         function openPowerShopScreen() {
+            closeGameQuickMenu();
             showScreen("powerShop");
             renderShop();
         }
 
         function openSettingsScreen() {
+            closeGameQuickMenu();
             showScreen("settings");
         }
 
@@ -725,7 +883,7 @@
                 selectedPowerUpId === "dash_boost" ||
                 selectedPowerUpId === "jump_boost" ||
                 selectedPowerUpId === "freeze_boost" ||
-                selectedPowerUpId === "immortal_boost";
+                selectedPowerUpId === "tracker_boost";
             powerBtn.classList.toggle("hidden", !shouldShow);
             powerBtn.disabled = !shouldShow;
             if (!shouldShow) {
@@ -749,9 +907,8 @@
             } else if (selectedPowerUpId === "freeze_boost") {
                 const on = effectFreezeTime > 0 ? ` ON:${formatSecondsFromFrames(effectFreezeTime)}` : "";
                 powerBtn.textContent = `Freeze Time${on} [E]`;
-            } else if (selectedPowerUpId === "immortal_boost") {
-                const on = effectImmortal > 0 ? ` ON:${formatSecondsFromFrames(effectImmortal)}` : "";
-                powerBtn.textContent = `Immortal${on} [E]`;
+            } else if (selectedPowerUpId === "tracker_boost") {
+                powerBtn.textContent = `Tracker Shot (${trackerUsesRemaining}) [E]`;
             } else {
                 powerBtn.textContent = "Use Power (E)";
             }
@@ -771,11 +928,24 @@
                 saveShopState();
                 return;
             }
-            if (selectedPowerUpId === "immortal_boost") {
-                effectImmortal = Math.max(effectImmortal, 600);
-                consumeOwnedPowerUp("immortal_boost");
+            if (selectedPowerUpId === "tracker_boost") {
+                if (trackerUsesRemaining <= 0) {
+                    menuStatus.textContent = "No tracker charges left. Buy Tracker Shot again.";
+                    trackerUsesRemaining = 0;
+                    consumeOwnedPowerUp("tracker_boost");
+                    updateUI();
+                    saveShopState();
+                    return;
+                }
+                fireTrackerShot();
+                trackerUsesRemaining -= 1;
+                if (trackerUsesRemaining <= 0) {
+                    trackerUsesRemaining = 0;
+                    consumeOwnedPowerUp("tracker_boost");
+                }
                 updateUI();
                 saveShopState();
+                saveGameState();
                 return;
             }
             if (selectedPowerUpId === "hp_boost") {
@@ -866,6 +1036,50 @@
             dashFxToX = targetX + (player.w * 0.6);
             dashFxY = Math.max(20, startY + (player.h * 0.6));
         }
+        function getNearestEnemyTarget(fromX, fromY) {
+            let nearest = null;
+            let bestDistSq = Infinity;
+            enemies.forEach(e => {
+                if (!e || e.dead) return;
+                const tx = e.x + e.w / 2;
+                const ty = e.y + e.h / 2;
+                const dx = tx - fromX;
+                const dy = ty - fromY;
+                const d2 = dx * dx + dy * dy;
+                if (d2 < bestDistSq) {
+                    bestDistSq = d2;
+                    nearest = e;
+                }
+            });
+            return nearest;
+        }
+        function fireTrackerShot() {
+            const startX = player.x + player.w / 2 + playerFacing * 10;
+            const startY = player.y + player.h * 0.42;
+            const target = getNearestEnemyTarget(startX, startY);
+            const speed = 7.2;
+            let vx = playerFacing * speed;
+            let vy = 0;
+            if (target) {
+                const dx = (target.x + target.w / 2) - startX;
+                const dy = (target.y + target.h / 2) - startY;
+                const mag = Math.hypot(dx, dy) || 1;
+                vx = (dx / mag) * speed;
+                vy = (dy / mag) * speed;
+            }
+            playerProjectiles.push({
+                x: startX - 5,
+                y: startY - 5,
+                w: 10,
+                h: 10,
+                vx,
+                vy,
+                speed,
+                turnRate: 0.2,
+                life: 150,
+                target
+            });
+        }
         function deepCopy(value) {
             return JSON.parse(JSON.stringify(value));
         }
@@ -873,6 +1087,7 @@
             solids = [];
             enemies = [];
             enemyProjectiles = [];
+            playerProjectiles = [];
             coins = [];
             spikes = [];
             invulnerable = 0;
@@ -1162,6 +1377,8 @@
                 addEnemyOnPlatform(enemyPads[i], cfg.enemySpeedBase + level * cfg.enemySpeedScale, level, tier);
             }
 
+            addLevelBoss(level, routePlatforms);
+
             levelTemplates[level] = deepCopy({
                 worldWidth,
                 goal,
@@ -1196,6 +1413,7 @@
                 unlockedPowerUps = [];
                 selectedPowerUpId = "";
                 dashUsesRemaining = 0;
+                trackerUsesRemaining = 0;
                 effectShield = 0;
                 effectSpeed = 0;
                 effectJump = 0;
@@ -1279,6 +1497,51 @@
 
         function updateEnemies() {
             enemies.forEach(e => {
+                if (e.type === "boss") {
+                    const playerCenter = player.x + player.w / 2;
+                    const bossCenter = e.x + e.w / 2;
+                    const chaseDir = playerCenter >= bossCenter ? 1 : -1;
+                    const targetSpeed = e.speed * (Math.abs(playerCenter - bossCenter) < 420 ? 1 : 0.55);
+                    e.vx = chaseDir * targetSpeed;
+                    e.x += e.vx;
+                    if (e.x <= e.minX) {
+                        e.x = e.minX;
+                        e.vx = Math.abs(e.vx);
+                    }
+                    if (e.x >= e.maxX) {
+                        e.x = e.maxX;
+                        e.vx = -Math.abs(e.vx);
+                    }
+
+                    e.jumpTimer -= 1;
+                    if (e.jumpTimer <= 0 && Math.abs(e.y - e.baseY) < 0.8) {
+                        e.vy = -e.jumpForce;
+                        e.jumpTimer = randomInt(e.jumpEveryMin, e.jumpEveryMax);
+                    }
+                    e.vy = clamp((e.vy || 0) + 0.5, -24, 13);
+                    e.y += e.vy;
+                    if (e.y >= e.baseY) {
+                        e.y = e.baseY;
+                        e.vy = 0;
+                    }
+
+                    e.shootTimer -= 1;
+                    const canShoot = e.projectileSpeed > 0 && e.shootEveryMax < 9000;
+                    if (canShoot && e.shootTimer <= 0) {
+                        const dir = playerCenter >= bossCenter ? 1 : -1;
+                        enemyProjectiles.push({
+                            x: e.x + e.w / 2 - 6,
+                            y: e.y + e.h * 0.44,
+                            w: 12,
+                            h: 12,
+                            vx: dir * e.projectileSpeed,
+                            vy: 0
+                        });
+                        e.shootTimer = randomInt(e.shootEveryMin, e.shootEveryMax);
+                    }
+                    if (e.hitFlash > 0) e.hitFlash -= 1;
+                    return;
+                }
                 if (e.type === "piranha") {
                     const ex = e.x - cameraX;
                     const onScreen = ex + e.w > 0 && ex < canvas.width;
@@ -1407,6 +1670,35 @@
                 p.x + p.w > 0 && p.x < worldWidth && p.y + p.h > -40 && p.y < canvas.height + 40
             );
         }
+        function updatePlayerProjectiles() {
+            playerProjectiles.forEach(p => {
+                p.life -= 1;
+                if (!p.target || p.target.dead || !enemies.includes(p.target)) {
+                    p.target = getNearestEnemyTarget(p.x + p.w / 2, p.y + p.h / 2);
+                }
+                if (p.target) {
+                    const dx = (p.target.x + p.target.w / 2) - (p.x + p.w / 2);
+                    const dy = (p.target.y + p.target.h / 2) - (p.y + p.h / 2);
+                    const mag = Math.hypot(dx, dy) || 1;
+                    const desiredVx = (dx / mag) * p.speed;
+                    const desiredVy = (dy / mag) * p.speed;
+                    p.vx += (desiredVx - p.vx) * p.turnRate;
+                    p.vy += (desiredVy - p.vy) * p.turnRate;
+                    const newMag = Math.hypot(p.vx, p.vy) || 1;
+                    p.vx = (p.vx / newMag) * p.speed;
+                    p.vy = (p.vy / newMag) * p.speed;
+                }
+                p.x += p.vx;
+                p.y += p.vy;
+            });
+            playerProjectiles = playerProjectiles.filter(p =>
+                p.life > 0 &&
+                p.x + p.w > -30 &&
+                p.x < worldWidth + 30 &&
+                p.y + p.h > -50 &&
+                p.y < canvas.height + 50
+            );
+        }
         function updateHazards() {
             spikes.forEach(h => {
                 if (h.type === "saw") {
@@ -1444,6 +1736,20 @@
                     }
                     continue;
                 }
+                if (enemy.type === "boss") {
+                    if (stomping) {
+                        enemy.health -= 1;
+                        enemy.hitFlash = 10;
+                        player.vy = -11.5;
+                        if (enemy.health <= 0) {
+                            enemy.dead = true;
+                            points += enemy.reward || 1200;
+                        }
+                    } else {
+                        hurtPlayer();
+                    }
+                    continue;
+                }
                 if (stomping && enemy.type !== "piranha") {
                     enemies.splice(i, 1);
                     player.vy = -10.5;
@@ -1460,6 +1766,33 @@
                 enemyProjectiles.splice(i, 1);
                 hurtPlayer();
                 if (effectImmortal <= 0) break;
+            }
+        }
+        function handlePlayerProjectileHits() {
+            for (let i = playerProjectiles.length - 1; i >= 0; i--) {
+                const shot = playerProjectiles[i];
+                let hit = false;
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    if (!enemy || enemy.dead) continue;
+                    if (!rectCollision(shot, enemy)) continue;
+                    hit = true;
+                    if (enemy.type === "boss") {
+                        enemy.health -= 1;
+                        enemy.hitFlash = 10;
+                        if (enemy.health <= 0) {
+                            enemy.dead = true;
+                            points += enemy.reward || 1200;
+                        }
+                    } else {
+                        enemies.splice(j, 1);
+                        points += 140;
+                    }
+                    break;
+                }
+                if (hit) {
+                    playerProjectiles.splice(i, 1);
+                }
             }
         }
 
@@ -1501,12 +1834,17 @@
         }
         function checkGoal() {
             if (!rectCollision(player, goal)) return;
+            if (isBossLevel(currentLevel) && getBossForLevel(currentLevel)) {
+                menuStatus.textContent = "Defeat the boss first!";
+                return;
+            }
             points += timeLeft * 8;
             if (currentLevel < MAX_LEVELS) {
                 currentLevel += 1;
                 buildLevel(currentLevel);
                 saveGameState();
             } else {
+                points += 1000000;
                 gameWon = true;
                 gamePaused = true;
                 lastRunTimeFrames = runElapsedFrames;
@@ -1516,7 +1854,7 @@
                 }
                 clearSavedRun();
                 updateUI();
-                openMainMenu(`Victory! Final score: ${points}. Time: ${formatFrames(runElapsedFrames)}.`);
+                openMainMenu("Victory!", true);
             }
         }
 
@@ -1646,9 +1984,11 @@
                 updateEnemies();
                 updateEnemyProjectiles();
             }
+            updatePlayerProjectiles();
             updateHazards();
             handleEnemyCollisions(prevY);
             handleEnemyProjectileCollisions();
+            handlePlayerProjectileHits();
             handleSpikeCollisions();
             collectCoins();
             checkGoal();
@@ -1754,12 +2094,130 @@
             const footSwing = step * 2.6;
             const cx = ex + enemy.w / 2;
             const cy = enemy.y + enemy.h / 2;
+            const isBoss = enemy.type === "boss";
             const isBeetle = enemy.type === "beetle";
             const isHopper = enemy.type === "hopper";
             const isFlyer = enemy.type === "flyer";
             const isShooter = enemy.type === "shooter";
             const isBomb = enemy.type === "bomb";
             const isPiranha = enemy.type === "piranha";
+
+            if (isBoss) {
+                const pulse = 0.6 + 0.4 * Math.sin(runElapsedFrames * 0.25);
+                const healthRatio = clamp((enemy.health || 0) / Math.max(1, enemy.maxHealth || 1), 0, 1);
+                const flashOn = enemy.hitFlash > 0;
+                const archetype = enemy.archetype || (enemy.level === 5 ? "goomba" : (enemy.level === 10 ? "bowser" : "evil_runner"));
+
+                ctx.save();
+                ctx.translate(cx, cy - bob * 0.35);
+                ctx.scale(facing, 1);
+
+                if (archetype === "goomba") {
+                    ctx.fillStyle = "#5b3718";
+                    ctx.fillRect(-enemy.w * 0.36, enemy.h * 0.28, enemy.w * 0.28, enemy.h * 0.16);
+                    ctx.fillRect(enemy.w * 0.08, enemy.h * 0.28, enemy.w * 0.28, enemy.h * 0.16);
+                    ctx.fillStyle = flashOn ? "#ffffff" : "#8b4d24";
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, enemy.w * 0.46, enemy.h * 0.42, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = "#f1c27d";
+                    ctx.beginPath();
+                    ctx.ellipse(0, enemy.h * 0.11, enemy.w * 0.24, enemy.h * 0.18, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = "#fffaf0";
+                    ctx.fillRect(-enemy.w * 0.18, -enemy.h * 0.14, enemy.w * 0.12, enemy.h * 0.14);
+                    ctx.fillRect(enemy.w * 0.06, -enemy.h * 0.14, enemy.w * 0.12, enemy.h * 0.14);
+                    ctx.fillStyle = "#111827";
+                    ctx.fillRect(-enemy.w * 0.13, -enemy.h * 0.1, enemy.w * 0.05, enemy.h * 0.08);
+                    ctx.fillRect(enemy.w * 0.1, -enemy.h * 0.1, enemy.w * 0.05, enemy.h * 0.08);
+                    ctx.strokeStyle = "#2f1608";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(-enemy.w * 0.2, -enemy.h * 0.16);
+                    ctx.lineTo(-enemy.w * 0.05, -enemy.h * 0.2);
+                    ctx.moveTo(enemy.w * 0.05, -enemy.h * 0.2);
+                    ctx.lineTo(enemy.w * 0.2, -enemy.h * 0.16);
+                    ctx.stroke();
+                } else if (archetype === "bowser") {
+                    ctx.fillStyle = "#2f7d32";
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, enemy.w * 0.46, enemy.h * 0.42, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = flashOn ? "#ffffff" : "#5e3a1f";
+                    ctx.fillRect(-enemy.w * 0.23, enemy.h * 0.05, enemy.w * 0.46, enemy.h * 0.22);
+                    ctx.fillStyle = "#f8e28b";
+                    ctx.fillRect(-enemy.w * 0.17, enemy.h * 0.09, enemy.w * 0.34, enemy.h * 0.14);
+                    ctx.fillStyle = "#3f3f46";
+                    ctx.fillRect(-enemy.w * 0.34, enemy.h * 0.28, enemy.w * 0.24, enemy.h * 0.15);
+                    ctx.fillRect(enemy.w * 0.1, enemy.h * 0.28, enemy.w * 0.24, enemy.h * 0.15);
+                    ctx.fillStyle = "#f8fafc";
+                    for (let i = 0; i < 4; i++) {
+                        const sx = -enemy.w * 0.25 + i * enemy.w * 0.16;
+                        ctx.beginPath();
+                        ctx.moveTo(sx, -enemy.h * 0.28);
+                        ctx.lineTo(sx + 5, -enemy.h * 0.44);
+                        ctx.lineTo(sx + 10, -enemy.h * 0.28);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                    ctx.fillStyle = "#fffaf0";
+                    ctx.fillRect(-enemy.w * 0.2, -enemy.h * 0.14, enemy.w * 0.12, enemy.h * 0.14);
+                    ctx.fillRect(enemy.w * 0.08, -enemy.h * 0.14, enemy.w * 0.12, enemy.h * 0.14);
+                    ctx.fillStyle = "#111827";
+                    ctx.fillRect(-enemy.w * 0.15, -enemy.h * 0.1, enemy.w * 0.05, enemy.h * 0.08);
+                    ctx.fillRect(enemy.w * 0.12, -enemy.h * 0.1, enemy.w * 0.05, enemy.h * 0.08);
+                } else {
+                    // Evil bigger player variant.
+                    const scaleX = 1.2;
+                    const scaleY = 1.2;
+                    ctx.scale(scaleX, scaleY);
+                    const body = flashOn ? "#ffffff" : "#111827";
+                    const pants = flashOn ? "#ffffff" : "#3f3f46";
+                    const hat = flashOn ? "#ffffff" : "#7f1d1d";
+                    ctx.fillStyle = "#f1c9a5";
+                    ctx.beginPath();
+                    ctx.arc(0, -enemy.h * 0.18, enemy.w * 0.12, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = hat;
+                    ctx.fillRect(-enemy.w * 0.16, -enemy.h * 0.34, enemy.w * 0.32, enemy.h * 0.11);
+                    ctx.fillRect(-enemy.w * 0.12, -enemy.h * 0.42, enemy.w * 0.24, enemy.h * 0.1);
+                    ctx.fillStyle = body;
+                    ctx.fillRect(-enemy.w * 0.15, -enemy.h * 0.06, enemy.w * 0.3, enemy.h * 0.28);
+                    ctx.fillStyle = pants;
+                    ctx.fillRect(-enemy.w * 0.15, enemy.h * 0.18, enemy.w * 0.3, enemy.h * 0.18);
+                    ctx.strokeStyle = "#0f172a";
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(-enemy.w * 0.08, enemy.h * 0.36);
+                    ctx.lineTo(-enemy.w * 0.12, enemy.h * 0.46);
+                    ctx.moveTo(enemy.w * 0.08, enemy.h * 0.36);
+                    ctx.lineTo(enemy.w * 0.12, enemy.h * 0.46);
+                    ctx.stroke();
+                    ctx.fillStyle = "#ef4444";
+                    ctx.fillRect(-enemy.w * 0.06, -enemy.h * 0.2, enemy.w * 0.05, enemy.h * 0.05);
+                    ctx.fillRect(enemy.w * 0.01, -enemy.h * 0.2, enemy.w * 0.05, enemy.h * 0.05);
+                }
+
+                ctx.strokeStyle = `rgba(248, 250, 252, ${0.35 + pulse * 0.4})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, Math.max(enemy.w, enemy.h) * 0.56, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+
+                const barW = Math.max(70, enemy.w + 24);
+                const barH = 8;
+                const barX = cx - barW / 2;
+                const barY = enemy.y - 18;
+                ctx.fillStyle = "rgba(15, 23, 42, 0.86)";
+                ctx.fillRect(barX, barY, barW, barH);
+                ctx.fillStyle = healthRatio > 0.45 ? "#22c55e" : (healthRatio > 0.2 ? "#f59e0b" : "#ef4444");
+                ctx.fillRect(barX + 1, barY + 1, (barW - 2) * healthRatio, barH - 2);
+                ctx.strokeStyle = "rgba(248, 250, 252, 0.75)";
+                ctx.lineWidth = 1;
+                ctx.strokeRect(barX, barY, barW, barH);
+                return;
+            }
 
             ctx.save();
             ctx.translate(cx, cy - bob * 0.5);
@@ -2140,6 +2598,19 @@
                 ctx.arc(px + p.w / 2, p.y + p.h / 2, p.w / 4, 0, Math.PI * 2);
                 ctx.fill();
             });
+            playerProjectiles.forEach(p => {
+                const px = p.x - cameraX;
+                if (px + p.w < -20 || px > canvas.width + 20) return;
+                const pulse = 0.65 + 0.35 * Math.sin(runElapsedFrames * 0.45 + p.x * 0.02);
+                ctx.fillStyle = `rgba(59, 130, 246, ${0.65 + pulse * 0.35})`;
+                ctx.beginPath();
+                ctx.arc(px + p.w / 2, p.y + p.h / 2, p.w / 2 + 1.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "#dbeafe";
+                ctx.beginPath();
+                ctx.arc(px + p.w / 2, p.y + p.h / 2, Math.max(2.4, p.w / 3), 0, Math.PI * 2);
+                ctx.fill();
+            });
 
             if (dashFxFrames > 0) {
                 const progress = dashFxFrames / 14;
@@ -2183,14 +2654,20 @@
             const selectedPower = getPowerUpById(selectedPowerUpId);
             let powerText = "NONE";
             if (selectedPower) {
-                powerText = selectedPower.id === "dash_boost"
-                    ? `${selectedPower.name} x${dashUsesRemaining}`
-                    : selectedPower.name;
+                if (selectedPower.id === "dash_boost") {
+                    powerText = `${selectedPower.name} x${dashUsesRemaining}`;
+                } else if (selectedPower.id === "tracker_boost") {
+                    powerText = `${selectedPower.name} x${trackerUsesRemaining}`;
+                } else {
+                    powerText = selectedPower.name;
+                }
             }
             const activeEffects = getActiveEffectTimers();
             if (activeEffects.length) powerText += ` [${activeEffects.join(" | ")}]`;
+            const liveBoss = getBossForLevel(currentLevel);
+            const bossText = liveBoss ? ` | BOSS HP: ${Math.max(0, liveBoss.health)}/${liveBoss.maxHealth}` : "";
             statsDisplay.innerText =
-                `LEVEL: ${currentLevel}/${MAX_LEVELS} | POINTS: ${points} | HEARTS: ${getHeartIcons()} | POWER: ${powerText} | RUN: ${formatFrames(runElapsedFrames)}`;
+                `LEVEL: ${currentLevel}/${MAX_LEVELS} | POINTS: ${points} | HEARTS: ${getHeartIcons()} | POWER: ${powerText}${bossText} | RUN: ${formatFrames(runElapsedFrames)}`;
             refreshPowerButtonVisibility();
         }
         function canContinue() {
@@ -2207,6 +2684,7 @@
                 timerCounter,
                 runElapsedFrames,
                 dashUsesRemaining,
+                trackerUsesRemaining,
                 shieldUsedThisRun,
                 speedUsedThisRun,
                 shieldCooldownFrames,
@@ -2226,6 +2704,7 @@
                 solids,
                 enemies,
                 enemyProjectiles,
+                playerProjectiles,
                 coins,
                 spikes,
                 goal,
@@ -2256,6 +2735,7 @@
                 dashUsesRemaining =
                     typeof s.dashUsesRemaining === "number" ? s.dashUsesRemaining :
                     (typeof s.teleportUsesRemaining === "number" ? s.teleportUsesRemaining : 3);
+                trackerUsesRemaining = typeof s.trackerUsesRemaining === "number" ? s.trackerUsesRemaining : 0;
                 shieldUsedThisRun = !!s.shieldUsedThisRun;
                 speedUsedThisRun = !!s.speedUsedThisRun;
                 shieldCooldownFrames = typeof s.shieldCooldownFrames === "number" ? s.shieldCooldownFrames : 0;
@@ -2263,7 +2743,8 @@
                 jumpCooldownFrames = typeof s.jumpCooldownFrames === "number" ? s.jumpCooldownFrames : 0;
                 selectedPowerUpId = s.selectedPowerUpId || selectedPowerUpId;
                 if (selectedPowerUpId === "teleport_boost") selectedPowerUpId = "dash_boost";
-                if (selectedPowerUpId === "points_boost") selectedPowerUpId = "immortal_boost";
+                if (selectedPowerUpId === "points_boost") selectedPowerUpId = "tracker_boost";
+                if (selectedPowerUpId === "immortal_boost") selectedPowerUpId = "tracker_boost";
                 cameraX = s.cameraX;
                 invulnerable = s.invulnerable;
                 effectShield = s.effectShield || 0;
@@ -2283,6 +2764,7 @@
                 solids = s.solids || [];
                 enemies = s.enemies || [];
                 enemyProjectiles = s.enemyProjectiles || [];
+                playerProjectiles = s.playerProjectiles || [];
                 coins = s.coins || [];
                 spikes = s.spikes || [];
                 goal = s.goal;
@@ -2321,7 +2803,8 @@
                 if (Array.isArray(unlockedPowers) && unlockedPowers.length > 0) {
                     const migrated = unlockedPowers.map(p => {
                         if (p === "teleport_boost") return "dash_boost";
-                        if (p === "points_boost") return "immortal_boost";
+                        if (p === "points_boost") return "tracker_boost";
+                        if (p === "immortal_boost") return "tracker_boost";
                         return p;
                     });
                     unlockedPowerUps = Array.from(new Set(migrated));
@@ -2332,7 +2815,8 @@
             const savedSkin = localStorage.getItem("mrp_equipped_skin");
             equippedSkin = unlockedSkins.includes(savedSkin) ? savedSkin : "classic";
             if (selectedPowerUpId === "teleport_boost") selectedPowerUpId = "dash_boost";
-            if (selectedPowerUpId === "points_boost") selectedPowerUpId = "immortal_boost";
+            if (selectedPowerUpId === "points_boost") selectedPowerUpId = "tracker_boost";
+            if (selectedPowerUpId === "immortal_boost") selectedPowerUpId = "tracker_boost";
             if (!unlockedPowerUps.includes(selectedPowerUpId)) {
                 selectedPowerUpId = "";
             }
@@ -2340,7 +2824,10 @@
                 selectedPowerUpId = "";
             }
             dashUsesRemaining = Number(localStorage.getItem("mrp_dash_charges") || 0);
+            trackerUsesRemaining = Number(localStorage.getItem("mrp_tracker_charges") || 0);
             if (!hasOwnedPowerUp("dash_boost")) dashUsesRemaining = 0;
+            if (!hasOwnedPowerUp("tracker_boost")) trackerUsesRemaining = 0;
+            if (hasOwnedPowerUp("tracker_boost") && trackerUsesRemaining <= 0) trackerUsesRemaining = 3;
         }
 
         function saveShopState() {
@@ -2349,12 +2836,15 @@
             localStorage.setItem("mrp_unlocked_powerups", JSON.stringify(unlockedPowerUps));
             localStorage.setItem("mrp_selected_powerup", selectedPowerUpId || "");
             localStorage.setItem("mrp_dash_charges", String(dashUsesRemaining));
+            localStorage.setItem("mrp_tracker_charges", String(trackerUsesRemaining));
         }
         function resetShopState() {
             unlockedSkins = ["classic"];
             equippedSkin = "classic";
             unlockedPowerUps = [];
             selectedPowerUpId = "";
+            dashUsesRemaining = 0;
+            trackerUsesRemaining = 0;
             saveShopState();
             renderShop();
             updateUI();
@@ -2421,7 +2911,8 @@
 
                 const label = document.createElement("span");
                 const dashText = item.id === "dash_boost" && hasOwnedPowerUp("dash_boost") ? ` [${dashUsesRemaining}/3]` : "";
-                label.textContent = `${item.name}${dashText} (${item.cost} pts)`;
+                const trackerText = item.id === "tracker_boost" && hasOwnedPowerUp("tracker_boost") ? ` [${trackerUsesRemaining}/3]` : "";
+                label.textContent = `${item.name}${dashText}${trackerText} (${item.cost} pts)`;
                 row.appendChild(label);
 
                 const btn = document.createElement("button");
@@ -2472,12 +2963,31 @@
                         if (item.id === "dash_boost") {
                             dashUsesRemaining = 3;
                         }
+                        if (item.id === "tracker_boost") {
+                            trackerUsesRemaining = 3;
+                        }
                         selectedPowerUpId = item.id;
                         saveShopState();
                         updateUI();
                         saveGameState();
                         renderShop();
                         menuStatus.textContent = `${item.name} bought.`;
+                        return;
+                    }
+                    if (item.id === "tracker_boost" && trackerUsesRemaining <= 0) {
+                        if (points < item.cost) {
+                            menuStatus.textContent = "Not enough points.";
+                            return;
+                        }
+                        points -= item.cost;
+                        trackerUsesRemaining = 3;
+                        selectedPowerUpId = item.id;
+                        addOwnedPowerUp(item.id);
+                        saveShopState();
+                        updateUI();
+                        saveGameState();
+                        renderShop();
+                        menuStatus.textContent = `${item.name} recharged to 3 shots.`;
                         return;
                     }
                     selectedPowerUpId = item.id;
@@ -2500,6 +3010,7 @@
             timerCounter = 0;
             runElapsedFrames = 0;
             dashUsesRemaining = hasOwnedPowerUp("dash_boost") ? (dashUsesRemaining > 0 ? dashUsesRemaining : 3) : 0;
+            trackerUsesRemaining = hasOwnedPowerUp("tracker_boost") ? (trackerUsesRemaining > 0 ? trackerUsesRemaining : 3) : 0;
             shieldUsedThisRun = false;
             speedUsedThisRun = false;
             shieldCooldownFrames = 0;
@@ -2547,9 +3058,38 @@
             menuStatus.textContent = "If this tab did not close, close it manually.";
         });
 
-        document.getElementById("home-btn").addEventListener("click", () => openMainMenu("Welcome"));
+        menuBtn.addEventListener("click", e => {
+            e.stopPropagation();
+            toggleGameQuickMenu();
+        });
+        gameMenuPanel.addEventListener("click", e => e.stopPropagation());
+        gameMenuNewBtn.addEventListener("click", () => {
+            closeGameQuickMenu();
+            startNewRun();
+        });
+        gameMenuContinueBtn.addEventListener("click", () => {
+            closeGameQuickMenu();
+            continueRun();
+        });
+        gameMenuSkinBtn.addEventListener("click", () => {
+            closeGameQuickMenu();
+            openSkinShopScreen();
+        });
+        gameMenuPowerBtn.addEventListener("click", () => {
+            closeGameQuickMenu();
+            openPowerShopScreen();
+        });
+        gameMenuTimeBtn.addEventListener("click", () => {
+            closeGameQuickMenu();
+            showTimeStats();
+        });
+        gameMenuBackBtn.addEventListener("click", () => {
+            closeGameQuickMenu();
+            openMainMenu("Welcome");
+        });
+        victoryBackBtn.addEventListener("click", () => openMainMenu("Welcome"));
+        document.addEventListener("click", () => closeGameQuickMenu());
         powerBtn.addEventListener("click", useSelectedPowerUpInGame);
-        timeBtn.addEventListener("click", showTimeStats);
 
         window.addEventListener("keydown", e => {
             keys[e.code] = true;
