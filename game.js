@@ -1,4 +1,4 @@
-﻿        const canvas = document.getElementById("gameCanvas");
+        const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         const statsDisplay = document.getElementById("stats-display");
 
@@ -419,7 +419,7 @@
             return 5;
         }
         function getHeartIcons() {
-            return health > 0 ? "â¤ï¸".repeat(health) : "NONE";
+            return health > 0 ? "\u2764\uFE0F".repeat(health) : "NONE";
         }
 
         function showScreen(name) {
@@ -700,6 +700,19 @@
             const cs = totalCentiseconds % 100;
             return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
         }
+        function formatSecondsFromFrames(frames) {
+            const safeFrames = Math.max(0, Number(frames) || 0);
+            return `${(safeFrames / 60).toFixed(1)}s`;
+        }
+        function getActiveEffectTimers() {
+            const timers = [];
+            if (effectShield > 0) timers.push(`SHIELD ${formatSecondsFromFrames(effectShield)}`);
+            if (effectSpeed > 0) timers.push(`SPEED ${formatSecondsFromFrames(effectSpeed)}`);
+            if (effectJump > 0) timers.push(`FLIGHT ${formatSecondsFromFrames(effectJump)}`);
+            if (effectFreezeTime > 0) timers.push(`FREEZE ${formatSecondsFromFrames(effectFreezeTime)}`);
+            if (effectImmortal > 0) timers.push(`IMMORTAL ${formatSecondsFromFrames(effectImmortal)}`);
+            return timers;
+        }
         function showTimeStats() {
             const best = bestTimeFrames > 0 ? formatFrames(bestTimeFrames) : "No clear time yet";
             const last = lastRunTimeFrames > 0 ? formatFrames(lastRunTimeFrames) : "No finished run yet";
@@ -722,18 +735,23 @@
             if (selectedPowerUpId === "dash_boost") {
                 powerBtn.textContent = `Dash (${dashUsesRemaining}) [E]`;
             } else if (selectedPowerUpId === "shield_boost") {
+                const on = effectShield > 0 ? ` ON:${formatSecondsFromFrames(effectShield)}` : "";
                 const cd = shieldCooldownFrames > 0 ? ` CD:${(shieldCooldownFrames / 60).toFixed(1)}s` : "";
-                powerBtn.textContent = `Shield${cd} [E]`;
+                powerBtn.textContent = `Shield${on}${cd} [E]`;
             } else if (selectedPowerUpId === "speed_boost") {
+                const on = effectSpeed > 0 ? ` ON:${formatSecondsFromFrames(effectSpeed)}` : "";
                 const cd = speedCooldownFrames > 0 ? ` CD:${(speedCooldownFrames / 60).toFixed(1)}s` : "";
-                powerBtn.textContent = `Speed${cd} [E]`;
+                powerBtn.textContent = `Speed${on}${cd} [E]`;
             } else if (selectedPowerUpId === "jump_boost") {
+                const on = effectJump > 0 ? ` ON:${formatSecondsFromFrames(effectJump)}` : "";
                 const cd = jumpCooldownFrames > 0 ? ` CD:${(jumpCooldownFrames / 60).toFixed(1)}s` : "";
-                powerBtn.textContent = `Flight${cd} [E]`;
+                powerBtn.textContent = `Flight${on}${cd} [E]`;
             } else if (selectedPowerUpId === "freeze_boost") {
-                powerBtn.textContent = "Freeze Time [E]";
+                const on = effectFreezeTime > 0 ? ` ON:${formatSecondsFromFrames(effectFreezeTime)}` : "";
+                powerBtn.textContent = `Freeze Time${on} [E]`;
             } else if (selectedPowerUpId === "immortal_boost") {
-                powerBtn.textContent = "Immortal [E]";
+                const on = effectImmortal > 0 ? ` ON:${formatSecondsFromFrames(effectImmortal)}` : "";
+                powerBtn.textContent = `Immortal${on} [E]`;
             } else {
                 powerBtn.textContent = "Use Power (E)";
             }
@@ -1928,6 +1946,35 @@
 
             ctx.restore();
         }
+        function drawPlayerStatusTimers(px) {
+            if (playerFrozenFrames <= 0) return;
+
+            const label = `FROZEN ${formatSecondsFromFrames(playerFrozenFrames)}`;
+            const centerX = px + player.w / 2;
+            const baseY = player.y - 14;
+
+            ctx.save();
+            ctx.font = "700 12px Inter, Arial, sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            const padX = 8;
+            const badgeH = 18;
+            const textW = ctx.measureText(label).width;
+            const badgeW = textW + padX * 2;
+            const badgeX = clamp(centerX - badgeW / 2, 4, canvas.width - badgeW - 4);
+            const badgeY = baseY - badgeH;
+
+            ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+            ctx.strokeStyle = "rgba(125, 211, 252, 0.95)";
+            ctx.lineWidth = 1.4;
+            ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
+            ctx.strokeRect(badgeX, badgeY, badgeW, badgeH);
+
+            ctx.fillStyle = "#e0f2fe";
+            ctx.fillText(label, badgeX + badgeW / 2, badgeY + badgeH / 2 + 0.5);
+            ctx.restore();
+        }
 
         function draw() {
             if (screens.game.classList.contains("hidden")) return;
@@ -2123,6 +2170,8 @@
                 ctx.arc(px + player.w / 2, player.y + player.h / 2, player.w / 1.3, 0, Math.PI * 2);
                 ctx.stroke();
             }
+
+            drawPlayerStatusTimers(px);
         }
 
         function updateUI() {
@@ -2138,8 +2187,8 @@
                     ? `${selectedPower.name} x${dashUsesRemaining}`
                     : selectedPower.name;
             }
-            const activeEffect = `${effectShield > 0 ? "SHIELD " : ""}${effectSpeed > 0 ? "SPEED " : ""}${effectJump > 0 ? "FLIGHT " : ""}${effectFreezeTime > 0 ? "FREEZE " : ""}${effectImmortal > 0 ? "IMMORTAL" : ""}`.trim();
-            if (activeEffect) powerText += ` [${activeEffect}]`;
+            const activeEffects = getActiveEffectTimers();
+            if (activeEffects.length) powerText += ` [${activeEffects.join(" | ")}]`;
             statsDisplay.innerText =
                 `LEVEL: ${currentLevel}/${MAX_LEVELS} | POINTS: ${points} | HEARTS: ${getHeartIcons()} | POWER: ${powerText} | RUN: ${formatFrames(runElapsedFrames)}`;
             refreshPowerButtonVisibility();
